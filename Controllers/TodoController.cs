@@ -1,13 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
-using System.Collections.Generic;
-using System.Linq;
+using Microsoft.Extensions.Configuration;
+using System;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
-using TodoApi.Models;
+using UAParser;
 
 namespace TodoApi.Controllers
 {
@@ -15,103 +11,40 @@ namespace TodoApi.Controllers
     [ApiController]
     public class TodoController : Controller
     {
-        private readonly TodoContext _context;
+        private readonly IConfiguration config;
 
-        public TodoController(TodoContext context)
-        {
-            _context = context;
-
-            if (_context.TodoItems.Count() == 0)
-            {
-                _context.TodoItems.Add(new TodoItem { Name = "Item1" });
-                _context.SaveChanges();
-            }
+        public TodoController(IConfiguration configuration)
+        {   
+            config = configuration;
         }
+        
+        // GET
+        [HttpGet("{ip}")]
+        public async Task<string> GetLocation(string ip)
+        {            
+            string apiResponse;
+            string url = config["AzureMapsHost"];
+            string subscriptionKey = config["AzureMapsSubscriptionKey"];
+            parseUA(config["UserAgent"]);
 
-        // GET: api/Todo
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<TodoItem>>> GetTodoItem()
-        {
-            return await _context.TodoItems.ToListAsync();
-        }
-
-        // GET: api/Todo/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<TodoItem>> GetTodoItem(long id)
-        {
-            var todoItem = await _context.TodoItems.FindAsync(id);
-
-            if (todoItem == null)
+            using (var httpClient = new HttpClient())
             {
-                return NotFound();
-            }
-
-            return todoItem;
-        }
-
-        // PUT: api/Todo/5
-        // To protect from overposting attacks, please enable the specific properties you want to bind to, for
-        // more details see https://aka.ms/RazorPagesCRUD.
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutTodoItem(long id, TodoItem todoItem)
-        {
-            if (id != todoItem.Id)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(todoItem).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!TodoItemExists(id))
+                string finalUrl = url + ip + subscriptionKey;
+                using (var response = await httpClient.GetAsync(finalUrl))
                 {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                    apiResponse = await response.Content.ReadAsStringAsync();
+                    return apiResponse;
+                }                
             }
-
-            return NoContent();
         }
-
-        // POST: api/Todo
-        // To protect from overposting attacks, please enable the specific properties you want to bind to, for
-        // more details see https://aka.ms/RazorPagesCRUD.
-        [HttpPost]
-        public async Task<ActionResult<TodoItem>> PostTodoItem(TodoItem todoItem)
+        
+        private void parseUA(string userAgent)
         {
-            _context.TodoItems.Add(todoItem);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetTodoItem", new { id = todoItem.Id }, todoItem);
-        }
-
-        // DELETE: api/Todo/5
-        [HttpDelete("{id}")]
-        public async Task<ActionResult<TodoItem>> DeleteTodoItem(long id)
-        {
-            var todoItem = await _context.TodoItems.FindAsync(id);
-            if (todoItem == null)
-            {
-                return NotFound();
-            }
-
-            _context.TodoItems.Remove(todoItem);
-            await _context.SaveChangesAsync();
-
-            return todoItem;
-        }
-
-        private bool TodoItemExists(long id)
-        {
-            return _context.TodoItems.Any(e => e.Id == id);
+            var parser = Parser.GetDefault();
+            var parsed = parser.Parse(userAgent);
+            Console.WriteLine("Device - " + parsed.Device);
+            Console.WriteLine("OS - " + parsed.OS);
+            Console.WriteLine("UA - " + parsed.UA);
         }
     }
 }
